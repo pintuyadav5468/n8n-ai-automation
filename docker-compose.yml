@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    restart: unless-stopped
+    container_name: n8n-ai-automation
+    ports:
+      - "5678:5678"
+    environment:
+      # Server config
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+
+      # Timezone (change to your local zone if needed)
+      - GENERIC_TIMEZONE=Asia/Kathmandu
+
+      # Security — CHANGE THIS to any long random string before first run
+      - N8N_ENCRYPTION_KEY=change-this-to-a-long-random-secret-key-32chars
+
+      # Execution settings
+      - EXECUTIONS_PROCESS=main
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=all
+      - EXECUTIONS_DATA_SAVE_ON_ERROR=all
+      - EXECUTIONS_DATA_MAX_AGE=168          # Keep 7 days of execution history
+
+      # Allow the HTTP Request node to call external APIs
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      - NODE_FUNCTION_ALLOW_EXTERNAL=*
+
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+    networks:
+      - n8n_net
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  n8n_data:
+    driver: local
+
+networks:
+  n8n_net:
+    driver: bridge
