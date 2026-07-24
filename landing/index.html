@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>n8n + Claude + Slack — AI Sheet Automation</title>
+<meta name="description" content="An end-to-end n8n workflow that watches a Google Sheet, summarizes and categorizes new rows with Anthropic Claude, and alerts Slack." />
+<style>
+  :root{
+    --bg:#0b0d12;
+    --bg-elev:#12151d;
+    --border:rgba(255,255,255,0.08);
+    --text:#e8eaf0;
+    --text-dim:#9aa1b2;
+    --accent:#7c9eff;
+    --accent-2:#7ce0c3;
+    --code-bg:#0a0c11;
+    --shadow: 0 8px 30px rgba(0,0,0,0.35);
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f7f8fb;
+      --bg-elev:#ffffff;
+      --border:rgba(15,20,30,0.08);
+      --text:#161a22;
+      --text-dim:#5b6272;
+      --accent:#3b5bdb;
+      --accent-2:#0f9d78;
+      --code-bg:#0f1117;
+      --shadow: 0 8px 30px rgba(20,25,40,0.08);
+    }
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.55;
+    overflow-x:hidden;
+  }
+  a{color:var(--accent);text-decoration:none;}
+  a:hover{text-decoration:underline;}
+  .wrap{max-width:920px;margin:0 auto;padding:0 24px;}
+
+  header.hero{
+    padding:96px 0 64px;
+    border-bottom:1px solid var(--border);
+    background:
+      radial-gradient(600px 300px at 15% -10%, rgba(124,158,255,0.16), transparent 60%),
+      radial-gradient(600px 300px at 85% -10%, rgba(124,224,195,0.14), transparent 60%);
+  }
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:8px;
+    font-size:13px;font-weight:600;letter-spacing:0.02em;
+    color:var(--accent-2);
+    background:rgba(124,224,195,0.1);
+    border:1px solid rgba(124,224,195,0.25);
+    padding:5px 12px;border-radius:999px;
+    margin-bottom:20px;
+  }
+  h1{
+    font-size:clamp(28px,5vw,44px);
+    line-height:1.15;
+    margin:0 0 16px;
+    letter-spacing:-0.02em;
+  }
+  .lede{
+    font-size:18px;
+    color:var(--text-dim);
+    max-width:640px;
+    margin:0 0 32px;
+  }
+  .cta-row{display:flex;flex-wrap:wrap;gap:12px;}
+  .btn{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:11px 20px;border-radius:10px;
+    font-size:14px;font-weight:600;
+    border:1px solid var(--border);
+    transition:transform 0.15s ease, border-color 0.15s ease;
+  }
+  .btn:hover{transform:translateY(-1px);text-decoration:none;}
+  .btn-primary{
+    background:var(--accent);
+    color:#08101f;
+    border-color:transparent;
+  }
+  .btn-secondary{
+    background:var(--bg-elev);
+    color:var(--text);
+  }
+  .btn-secondary:hover{border-color:var(--accent);}
+
+  section{padding:56px 0;border-bottom:1px solid var(--border);}
+  section:last-of-type{border-bottom:none;}
+  h2{
+    font-size:22px;
+    margin:0 0 28px;
+    letter-spacing:-0.01em;
+  }
+  .badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:24px;}
+  .badge{
+    font-size:12.5px;font-weight:600;
+    color:var(--text-dim);
+    background:var(--bg-elev);
+    border:1px solid var(--border);
+    padding:5px 11px;border-radius:8px;
+  }
+
+  /* Flow diagram */
+  .flow{
+    display:flex;flex-direction:column;align-items:center;gap:0;
+  }
+  .flow-node{
+    width:100%;max-width:420px;
+    background:var(--bg-elev);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:16px 20px;
+    box-shadow:var(--shadow);
+  }
+  .flow-node h3{margin:0 0 4px;font-size:15px;}
+  .flow-node p{margin:0;font-size:13.5px;color:var(--text-dim);}
+  .flow-arrow{
+    color:var(--text-dim);
+    font-size:13px;
+    padding:10px 0;
+    display:flex;align-items:center;gap:6px;
+  }
+  .flow-arrow::before, .flow-arrow::after{content:"";flex:none;}
+  .flow-split{
+    display:flex;gap:16px;width:100%;max-width:520px;
+    justify-content:center;flex-wrap:wrap;
+  }
+  .flow-split .flow-node{max-width:240px;}
+
+  pre{
+    background:var(--code-bg);
+    color:#d6dae3;
+    border-radius:12px;
+    padding:20px;
+    overflow-x:auto;
+    font-size:13px;
+    line-height:1.6;
+    border:1px solid var(--border);
+  }
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+  .inline-code{
+    background:var(--bg-elev);
+    border:1px solid var(--border);
+    padding:2px 6px;border-radius:6px;
+    font-size:0.9em;
+  }
+
+  table{width:100%;border-collapse:collapse;font-size:14px;}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);}
+  th{color:var(--text-dim);font-weight:600;font-size:13px;}
+
+  ol.steps{padding-left:20px;margin:0;}
+  ol.steps li{margin-bottom:10px;font-size:15px;}
+
+  .grid-notes{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+    gap:14px;
+  }
+  .note-card{
+    background:var(--bg-elev);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:16px 18px;
+  }
+  .note-card b{display:block;margin-bottom:4px;font-size:14px;}
+  .note-card span{font-size:13px;color:var(--text-dim);}
+
+  footer{
+    padding:40px 0 80px;
+    color:var(--text-dim);
+    font-size:13.5px;
+  }
+  footer a{color:var(--text-dim);}
+  footer a:hover{color:var(--accent);}
+
+  @media (max-width:600px){
+    header.hero{padding:64px 0 40px;}
+    section{padding:40px 0;}
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="eyebrow">● Portfolio project — self-hosted, open source</span>
+    <h1>AI-powered sheet automation with n8n + Claude + Slack</h1>
+    <p class="lede">
+      Watches a Google Sheet for new rows, sends each one to Anthropic Claude for
+      summarization and categorization, writes the results back to the sheet, and
+      posts an alert to Slack — running entirely on your own infrastructure via Docker.
+    </p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/pintuyadav5468/n8n-ai-automation" target="_blank" rel="noopener">View on GitHub →</a>
+      <a class="btn btn-secondary" href="#quick-start">Quick start</a>
+    </div>
+    <div class="badges">
+      <span class="badge">n8n</span>
+      <span class="badge">Anthropic Claude</span>
+      <span class="badge">Google Sheets API</span>
+      <span class="badge">Slack API</span>
+      <span class="badge">Docker</span>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>How it works</h2>
+    <div class="flow">
+      <div class="flow-node">
+        <h3>Google Sheets Trigger</h3>
+        <p>Polls the sheet every 60s and detects new rows, outputting the "Input" column.</p>
+      </div>
+      <div class="flow-arrow">↓</div>
+      <div class="flow-node">
+        <h3>HTTP Request → Claude API</h3>
+        <p>POSTs to <code class="inline-code">api.anthropic.com/v1/messages</code> with a structured prompt (model: claude-sonnet-4-6).</p>
+      </div>
+      <div class="flow-arrow">↓</div>
+      <div class="flow-node">
+        <h3>Code Node — Parse Response</h3>
+        <p>Extracts strict JSON: <code class="inline-code">{ summary, category, row_number }</code>, with a regex fallback for stray markdown fences.</p>
+      </div>
+      <div class="flow-arrow">↓ (fans out in parallel) ↓</div>
+      <div class="flow-split">
+        <div class="flow-node">
+          <h3>Google Sheets Update</h3>
+          <p>Writes summary + category back to the same row.</p>
+        </div>
+        <div class="flow-node">
+          <h3>Slack Node</h3>
+          <p>Posts "New [Category]: [Summary]" to #automations.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>The Claude prompt</h2>
+    <p style="color:var(--text-dim);font-size:14.5px;margin-top:-12px;">
+      Instructs the model to return strict JSON only, so the Code node can parse it reliably with <code class="inline-code">JSON.parse()</code>.
+    </p>
+    <pre><code>You are a text classification and summarization assistant. Analyze the following
+text and return ONLY a valid JSON object — no markdown, no explanation, no extra text.
+
+Text to analyze:
+"""
+[INPUT TEXT FROM THE SHEET]
+"""
+
+Return ONLY this JSON:
+{
+  "summary": "one sentence capturing the main point (max 20 words)",
+  "category": "Support OR Sales OR Feedback OR Spam"
+}
+
+Rules:
+- summary: Exactly one concise sentence, under 20 words.
+- category: Must be exactly one of: Support, Sales, Feedback, Spam.
+- Output ONLY the raw JSON object. No markdown code fences. No extra words.</code></pre>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Tech stack</h2>
+    <table>
+      <thead><tr><th>Tool</th><th>Role</th><th>Cost</th></tr></thead>
+      <tbody>
+        <tr><td>n8n (self-hosted)</td><td>Workflow automation engine</td><td>Free</td></tr>
+        <tr><td>Google Sheets API</td><td>Trigger source + output destination</td><td>Free</td></tr>
+        <tr><td>Anthropic Claude (claude-sonnet-4-6)</td><td>AI summarization + categorization</td><td>Pay-per-token</td></tr>
+        <tr><td>Slack API</td><td>Notification delivery</td><td>Free</td></tr>
+        <tr><td>Docker</td><td>Local container runtime</td><td>Free</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="quick-start">
+  <div class="wrap">
+    <h2>Quick start</h2>
+    <ol class="steps">
+      <li>Clone the repo and run <code class="inline-code">docker compose up -d</code> to start n8n locally.</li>
+      <li>Open <code class="inline-code">http://localhost:5678</code> and create your owner account.</li>
+      <li>Follow <code class="inline-code">docs/setup-guide.md</code> to connect Google Sheets, Anthropic, and Slack credentials.</li>
+      <li>Import <code class="inline-code">workflow/ai-automation-workflow.json</code>.</li>
+      <li>Update the Google Sheet ID in both Google Sheets nodes.</li>
+      <li>Toggle the workflow Active and add a row to your sheet.</li>
+    </ol>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>What this demonstrates</h2>
+    <div class="grid-notes">
+      <div class="note-card"><b>API integration</b><span>Calling a third-party LLM API via HTTP with header-based auth inside a workflow node.</span></div>
+      <div class="note-card"><b>Prompt engineering</b><span>Structuring a prompt to return machine-parseable output reliably.</span></div>
+      <div class="note-card"><b>Event-driven architecture</b><span>A polling trigger that reacts to external data changes without a dedicated server.</span></div>
+      <div class="note-card"><b>Parallel execution</b><span>The parsed result fans out to two independent actions simultaneously.</span></div>
+      <div class="note-card"><b>Error resilience</b><span>A regex fallback handles malformed LLM output in the Code node.</span></div>
+      <div class="note-card"><b>Infrastructure as code</b><span>The entire environment is defined in docker-compose.yml and reproducible in one command.</span></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    Built by <a href="https://github.com/pintuyadav5468" target="_blank" rel="noopener">@pintuyadav5468</a> ·
+    <a href="https://github.com/pintuyadav5468/n8n-ai-automation" target="_blank" rel="noopener">Source on GitHub</a>
+  </div>
+</footer>
+
+</body>
+</html>
